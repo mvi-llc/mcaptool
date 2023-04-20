@@ -28,13 +28,13 @@ jobs:
       - name: Setup conan cache
         uses: actions/cache@v3
         with:
-          path: ~/.conan
+          path: ~/.conan2
           key: ${{ runner.os }}-conan-${{ hashFiles('**/conanfile.txt') }}
           restore-keys: |
             ${{ runner.os }}-conan-
 
-      - name: Configure conan profile
-        run: conan profile detect --force
+      - name: Install conan CI profile
+        run: conan config install .conan
 
       - name: Lint
         run: make format
