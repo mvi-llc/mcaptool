@@ -1,0 +1,14 @@
+[requires]
+argparse/2.9
+ffmpeg/5.1
+fmt/9.1.0
+mcap/1.0.0
+protobuf/3.21.9
+spdlog/1.11.0
+
+[tool_requires]
+cmake/3.25.3
+
+[generators]
+CMakeDeps
+CMakeToolchain
