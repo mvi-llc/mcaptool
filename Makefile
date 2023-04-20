@@ -7,11 +7,11 @@ default: release
 
 release:
 	conan install . -s compiler.cppstd=$(CPPSTD) --output-folder=build --build=missing
-	cd ./$(BUILD_DIR) && source conanbuild.sh && cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DWERROR=$(WERROR) && VERBOSE=1 cmake --build .
+	cd ./$(BUILD_DIR) && bash -c "source conanbuild.sh && cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DWERROR=$(WERROR) && VERBOSE=1 cmake --build ."
 
 debug:
 	conan install . -s compiler.cppstd=$(CPPSTD) --output-folder=build --build=missing
-	cd ./$(BUILD_DIR) && source conanbuild.sh && cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -DWERROR=$(WERROR) && VERBOSE=1 cmake --build .
+	cd ./$(BUILD_DIR) && bash -c "source conanbuild.sh && cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -DWERROR=$(WERROR) && VERBOSE=1 cmake --build ."
 
 clean:
 	rm -rf ./$(BUILD_DIR)
