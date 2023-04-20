@@ -3,6 +3,7 @@
 #include <mcap/mcap.hpp>
 
 #include <cctype>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>

@@ -14,10 +14,15 @@ CMakeDeps
 CMakeToolchain
 
 [options]
+ffmpeg*:avdevice=False
+ffmpeg*:swresample=False
+ffmpeg*:swscale=False
+ffmpeg*:postproc=False
 ffmpeg*:avfilter=False
 ffmpeg*:with_libiconv=False
 ffmpeg*:with_freetype=False
 ffmpeg*:with_openjpeg=False
+ffmpeg*:with_openh264=False
 ffmpeg*:with_opus=False
 ffmpeg*:with_vorbis=False
 ffmpeg*:with_zeromq=False
