@@ -40,4 +40,4 @@ jobs:
         run: make format
 
       - name: Build
-        run: make
+        run: make ci
