@@ -3,6 +3,7 @@
 #include <mcap/mcap.hpp>
 
 #include <cctype>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -16,8 +17,9 @@ struct OutputMcap {
   std::unique_ptr<mcap::McapWriter> writer;
   size_t messageCount;
 
-  OutputMcap(const std::string& filename)
-      : filename(filename) {}
+  OutputMcap(const std::string& name)
+      : filename(name)
+      , messageCount(0) {}
 };
 
 bool Split(const std::string& inputFilename, const std::string& outputDir) {
