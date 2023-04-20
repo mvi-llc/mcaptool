@@ -14,16 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: egor-tensin/setup-clang@v1
-        with:
-          version: 15
-
-      # Install libc++-15-dev
-      - name: Install libc++
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libc++-15-dev
-
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
@@ -40,11 +30,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-conan-
 
-      - name: Install conan CI profile
-        run: conan config install .conan
+      - name: Setup conan profile
+        run: conan profile detect --force
 
       - name: Lint
         run: make format
 
       - name: Build
-        run: make ci
+        run: make
