@@ -33,6 +33,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-conan-
 
+      - name: Configure conan profile
+        run: conan profile detect --force
+
       - name: Lint
         run: make format
 
