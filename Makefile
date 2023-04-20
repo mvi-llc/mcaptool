@@ -14,7 +14,7 @@ debug:
 	cd ./$(BUILD_DIR) && source conanbuild.sh && cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -DWERROR=$(WERROR) && VERBOSE=1 cmake --build .
 
 ci:
-	conan install . -s compiler.cppstd=$(CPPSTD) --output-folder=build --build=missing --profile=ci-x86_64
+	conan install . -s compiler.cppstd=$(CPPSTD) --output-folder=build --build=missing --profile:build=ci-x86_64
 	cd ./$(BUILD_DIR) && source conanbuild.sh && cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -DWERROR=$(WERROR) && VERBOSE=1 cmake --build .
 
 clean:
