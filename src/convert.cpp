@@ -67,8 +67,8 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
   // Write video data to the "video" topic
   const bool result = ExtractVideoFrames(inputFilename, [&](const VideoFrame& frame) {
     foxglove::CompressedImage image;
-    image.mutable_timestamp()->set_seconds(frame.timestamp / 1000000000);
-    image.mutable_timestamp()->set_nanos(frame.timestamp % 1000000000);
+    image.mutable_timestamp()->set_seconds(int64_t(frame.timestamp / 1000000000));
+    image.mutable_timestamp()->set_nanos(int32_t(frame.timestamp % 1000000000));
     image.set_frame_id("video");
     image.set_format(frame.isKeyframe ? mimeKeyframe : mime);
     image.set_data(frame.data, frame.size);
