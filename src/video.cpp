@@ -12,8 +12,6 @@ extern "C" {
 #include <libavformat/avformat.h>
 }
 
-namespace log = spdlog;
-
 struct AV1CodecConfigurationRecord {
   uint8_t profile;
   uint8_t level;
@@ -101,12 +99,12 @@ static std::optional<AV1CodecConfigurationRecord> ParseAV1CodecConfigurationReco
 std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename) {
   AVFormatContext* formatCtx = nullptr;
   if (avformat_open_input(&formatCtx, videoFilename.data(), nullptr, nullptr) != 0) {
-    log::error("Failed to open \"{}\"", videoFilename);
+    spdlog::error("Failed to open \"{}\"", videoFilename);
     return {};
   }
 
   if (avformat_find_stream_info(formatCtx, nullptr) < 0) {
-    log::error("Failed to find stream info for \"{}\"", videoFilename);
+    spdlog::error("Failed to find stream info for \"{}\"", videoFilename);
     avformat_close_input(&formatCtx);
     return {};
   }
@@ -123,7 +121,7 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
     AVCodecParameters* codecParams = formatCtx->streams[videoStreamIndex]->codecpar;
     const AVCodecDescriptor* codecDesc = avcodec_descriptor_get(codecParams->codec_id);
     if (!codecDesc) {
-      log::error("Failed to get codec descriptor for \"{}\"", videoFilename);
+      spdlog::error("Failed to get codec descriptor for \"{}\"", videoFilename);
       avformat_close_input(&formatCtx);
       return {};
     }
@@ -139,8 +137,8 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
       // <https://www.w3.org/TR/webcodecs-hevc-codec-registration/#fully-qualified-codec-strings>
       const uint8_t* extradata = codecParams->extradata;
       if (codecParams->extradata_size < 23) {
-        log::error("HEVC extradata is too small (%d bytes) for \"{}\"", codecParams->extradata_size,
-                   videoFilename);
+        spdlog::error("HEVC extradata is too small (%d bytes) for \"{}\"",
+                      codecParams->extradata_size, videoFilename);
         avformat_close_input(&formatCtx);
         return {};
       }
@@ -178,7 +176,7 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
       const size_t extradataSize = size_t(codecParams->extradata_size);
 
       if (extradataSize <= 9 || extradata[0] != 1) {
-        log::error("Error: Invalid H.264 extradata in \"{}\"", videoFilename);
+        spdlog::error("Error: Invalid H.264 extradata in \"{}\"", videoFilename);
         avformat_close_input(&formatCtx);
         return {};
       }
@@ -206,7 +204,7 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
 
       const auto av1Config = ParseAV1CodecConfigurationRecord(extradata, extradataSize);
       if (!av1Config) {
-        log::error("Error: Invalid AV1 extradata in \"{}\"", videoFilename);
+        spdlog::error("Error: Invalid AV1 extradata in \"{}\"", videoFilename);
         avformat_close_input(&formatCtx);
         return {};
       }
@@ -227,7 +225,7 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
     }
   }
 
-  log::error("Failed to find compatible video stream in \"{}\"", videoFilename);
+  spdlog::error("Failed to find compatible video stream in \"{}\"", videoFilename);
   avformat_close_input(&formatCtx);
   return {};
 }
@@ -236,12 +234,12 @@ bool ExtractVideoFrames(const std::string& videoFilename,
                         std::function<void(const VideoFrame&)> callback) {
   AVFormatContext* formatCtx = nullptr;
   if (avformat_open_input(&formatCtx, videoFilename.c_str(), nullptr, nullptr) != 0) {
-    log::error("Failed to open \"{}\"", videoFilename);
+    spdlog::error("Failed to open \"{}\"", videoFilename);
     return false;
   }
 
   if (avformat_find_stream_info(formatCtx, nullptr) < 0) {
-    log::error("Failed to find stream info for \"{}\"", videoFilename);
+    spdlog::error("Failed to find stream info for \"{}\"", videoFilename);
     avformat_close_input(&formatCtx);
     return false;
   }
@@ -249,7 +247,7 @@ bool ExtractVideoFrames(const std::string& videoFilename,
   const int videoStreamIndex =
     av_find_best_stream(formatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
   if (videoStreamIndex < 0) {
-    log::error("Failed to find video stream in \"{}\"", videoFilename);
+    spdlog::error("Failed to find video stream in \"{}\"", videoFilename);
     return false;
   }
 
@@ -273,19 +271,19 @@ bool ExtractVideoFrames(const std::string& videoFilename,
     const AVBitStreamFilter* bitstreamFilter =
       av_bsf_get_by_name(codecId == AV_CODEC_ID_HEVC ? "hevc_mp4toannexb" : "h264_mp4toannexb");
     if (!bitstreamFilter) {
-      log::error("av_bsf_get_by_name() failed for \"{}\"", videoFilename);
+      spdlog::error("av_bsf_get_by_name() failed for \"{}\"", videoFilename);
       cleanup();
       return false;
     }
     AVBSFContext* bsfContext = nullptr;
     if (av_bsf_alloc(bitstreamFilter, &bsfContext) < 0) {
-      log::error("av_bsf_alloc() failed for \"{}\"", videoFilename);
+      spdlog::error("av_bsf_alloc() failed for \"{}\"", videoFilename);
       cleanup();
       return false;
     }
     bsfContext->par_in = stream->codecpar;
     if (av_bsf_init(bsfContext) < 0) {
-      log::error("av_bsf_init() failed for \"{}\"", videoFilename);
+      spdlog::error("av_bsf_init() failed for \"{}\"", videoFilename);
       cleanup();
       return false;
     }
@@ -313,8 +311,8 @@ bool ExtractVideoFrames(const std::string& videoFilename,
           // Unexpected error
           char errStr[128] = {};
           av_strerror(err, errStr, sizeof(errStr));
-          log::error("av_read_frame() failed at position {} in \"{}\": {}", packetPos,
-                     videoFilename, errStr);
+          spdlog::error("av_read_frame() failed at position {} in \"{}\": {}", packetPos,
+                        videoFilename, errStr);
           cleanup();
           return false;
         }
@@ -326,7 +324,7 @@ bool ExtractVideoFrames(const std::string& videoFilename,
 
       // Send the packet to the bitstream filter
       if (av_bsf_send_packet(bsfContext, packet) < 0) {
-        log::error("av_bsf_send_packet() failed for \"{}\"", videoFilename);
+        spdlog::error("av_bsf_send_packet() failed for \"{}\"", videoFilename);
         cleanup();
         return false;
       }
@@ -338,7 +336,7 @@ bool ExtractVideoFrames(const std::string& videoFilename,
           // Unexpected error
           char errStr[128]{};
           av_strerror(recvStatus, errStr, sizeof(errStr));
-          log::error("av_bsf_receive_packet() failed for \"{}\": {}", videoFilename, errStr);
+          spdlog::error("av_bsf_receive_packet() failed for \"{}\": {}", videoFilename, errStr);
           cleanup();
           return false;
         }
@@ -364,7 +362,7 @@ bool ExtractVideoFrames(const std::string& videoFilename,
     assert(false && "AV1 codec not yet supported");
   }
 
-  log::error("Failed to find compatible video stream in \"{}\"", videoFilename);
+  spdlog::error("Failed to find compatible video stream in \"{}\"", videoFilename);
   cleanup();
   return false;
 }

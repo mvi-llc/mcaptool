@@ -7,8 +7,6 @@
 #include "protobuf.hpp"
 #include "video.hpp"
 
-namespace log = spdlog;
-
 static std::string BytesToHex(const mcap::ByteArray& bytes) {
   std::string result;
   result.reserve(bytes.size() * 2);
@@ -24,8 +22,8 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     return false;
   }
 
-  log::debug("Input is {}x{} {}; codecs=\"{}\"", codecInfo->codedWidth, codecInfo->codedHeight,
-             codecInfo->mime, codecInfo->codec);
+  spdlog::debug("Input is {}x{} {}; codecs=\"{}\"", codecInfo->codedWidth, codecInfo->codedHeight,
+                codecInfo->mime, codecInfo->codec);
 
   // Open the output file
   mcap::McapWriter writer;
@@ -88,15 +86,15 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     msg.data = frame.data;
     const auto writeStatus = writer.write(msg);
     if (!writeStatus.ok()) {
-      log::error("Failed to write video frame {} ({} bytes): {}", frameNumber, frame.size,
-                 writeStatus.message);
+      spdlog::error("Failed to write video frame {} ({} bytes): {}", frameNumber, frame.size,
+                    writeStatus.message);
     }
 
     frameNumber++;
   });
 
   if (!result) {
-    log::error("Failed to extract video frames from \"{}\"", inputFilename);
+    spdlog::error("Failed to extract video frames from \"{}\"", inputFilename);
   }
 
   // Close the current chunk to ensure keyframes are written to a separate chunk
@@ -113,13 +111,13 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     msg.data = nullptr;
     const auto writeStatus = writer.write(msg);
     if (!writeStatus.ok()) {
-      log::error("Failed to write keyframe message {}: {}", sequence, writeStatus.message);
+      spdlog::error("Failed to write keyframe message {}: {}", sequence, writeStatus.message);
     }
   }
 
   writer.close();
-  log::debug("Wrote {} video frames ({} keyframes) to \"{}\"", frameNumber, keyframes.size(),
-             outputFilename);
+  spdlog::debug("Wrote {} video frames ({} keyframes) to \"{}\"", frameNumber, keyframes.size(),
+                outputFilename);
 
   return true;
 }
