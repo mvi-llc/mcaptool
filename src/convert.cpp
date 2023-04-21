@@ -164,6 +164,7 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
   const std::string mimeKeyframe = mime + ";" + MimeKeyValues(keyframeMetadata);
   uint32_t frameNumber = 0;
   std::vector<std::pair<uint32_t, uint64_t>> keyframes;
+  std::vector<uint8_t> serializedMsg;
 
   // Write video data to the "video" topic
   const bool result = ExtractVideoFrames(inputFilename, [&](const VideoFrame& frame) {
@@ -173,7 +174,11 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     image.set_frame_id("video");
     image.set_format(frame.isKeyframe ? mimeKeyframe : mime);
     image.set_data(frame.data, frame.size);
-    const auto serializedMsg = image.SerializeAsString();
+    const size_t serializedSize = image.ByteSizeLong();
+    if (serializedSize > serializedMsg.size()) {
+      serializedMsg.resize(serializedSize);
+    }
+    image.SerializeWithCachedSizesToArray(serializedMsg.data());
 
     if (frame.isKeyframe) {
       keyframes.emplace_back(frameNumber, frame.timestamp);
@@ -184,7 +189,7 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     msg.sequence = frameNumber;
     msg.logTime = frame.timestamp;
     msg.publishTime = frame.timestamp;
-    msg.dataSize = serializedMsg.size();
+    msg.dataSize = serializedSize;
     msg.data = reinterpret_cast<const std::byte*>(serializedMsg.data());
     const auto writeStatus = writer.write(msg);
     if (!writeStatus.ok()) {
