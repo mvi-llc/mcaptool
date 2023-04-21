@@ -3,6 +3,8 @@
 #include <mcap/mcap.hpp>
 #include <spdlog/spdlog.h>
 
+#include <sstream>
+
 #include "proto/foxglove/CompressedImage.pb.h"
 #include "protobuf.hpp"
 #include "video.hpp"
@@ -16,14 +18,30 @@ static std::string BytesToHex(const mcap::ByteArray& bytes) {
   return result;
 }
 
+// NOTE: This does not do any escaping on keys or values
+static std::string ToJson(const mcap::KeyValueMap& map) {
+  std::stringstream result;
+  result << "{";
+  bool first = true;
+  for (const auto& [key, value] : map) {
+    if (!first) {
+      result << ",";
+    }
+    first = false;
+    result << fmt::format("\"{}\":\"{}\"", key, value);
+  }
+  result << "}";
+  return result.str();
+}
+
 bool Convert(const std::string& inputFilename, const std::string& outputFilename) {
-  const auto codecInfo = GetVideoCodecInfo(inputFilename);
-  if (!codecInfo) {
+  const auto config = GetVideoDecoderConfig(inputFilename);
+  if (!config) {
     return false;
   }
 
-  spdlog::debug("Input is {}x{} {}; codecs=\"{}\"", codecInfo->codedWidth, codecInfo->codedHeight,
-                codecInfo->mime, codecInfo->codec);
+  spdlog::debug("Input is {}x{} {}; codecs=\"{}\"", config->codedWidth, config->codedHeight,
+                config->mime, config->codec);
 
   // Open the output file
   mcap::McapWriter writer;
@@ -36,6 +54,9 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     return false;
   }
 
+  const std::string topicName = "video";
+  const std::string keyframeTopicName = "video/keyframes";
+
   // Create a schema for `foxglove.CompressedImage`
   mcap::Schema schema{"foxglove.CompressedImage", "protobuf",
                       ProtobufFdSet(foxglove::CompressedImage::descriptor())};
@@ -43,24 +64,31 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
 
   // Create a topic for the "video" topic
   mcap::KeyValueMap videoMetadata{
-    {"keyframe_index", "video/keyframes"},
-    {"video:coded_width", std::to_string(codecInfo->codedWidth)},
-    {"video:coded_height", std::to_string(codecInfo->codedHeight)},
-    {"video:codec", codecInfo->codec},
-    {"video:mime", codecInfo->mime},
+    {"keyframe_index", keyframeTopicName},
+    {"video:coded_width", std::to_string(config->codedWidth)},
+    {"video:coded_height", std::to_string(config->codedHeight)},
+    {"video:codec", config->codec},
+    {"video:mime", config->mime},
   };
-  if (!codecInfo->description.empty()) {
-    videoMetadata["video:description"] = BytesToHex(codecInfo->description);
+  mcap::KeyValueMap keyframeMetadata{
+    {"keyframe_index", keyframeTopicName},
+    {"coded_width", std::to_string(config->codedWidth)},
+    {"coded_height", std::to_string(config->codedHeight)},
+    {"codec", config->codec},
+  };
+  if (!config->description.empty()) {
+    videoMetadata["video:description"] = BytesToHex(config->description);
+    keyframeMetadata["description"] = BytesToHex(config->description);
   }
-  mcap::Channel videoChannel{"video", "protobuf", schema.id, videoMetadata};
+  mcap::Channel videoChannel{topicName, "protobuf", schema.id, videoMetadata};
   writer.addChannel(videoChannel);
 
   // Create a topic fo the "video/keyframes" topic
-  mcap::Channel keyframeChannel{"video/keyframes", "", 0, {}};
+  mcap::Channel keyframeChannel{keyframeTopicName, "", 0, {}};
   writer.addChannel(keyframeChannel);
 
-  const std::string mime = codecInfo->mime;
-  const std::string mimeKeyframe = mime + "; keyframe";
+  const std::string mime = config->mime;
+  const std::string mimeKeyframe = mime + ";" + ToJson(keyframeMetadata);
   uint32_t frameNumber = 0;
   std::vector<std::pair<uint32_t, uint64_t>> keyframes;
 

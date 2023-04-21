@@ -5,11 +5,18 @@
 #include <string>
 #include <vector>
 
-struct VideoCodecInfo {
+struct VideoDecoderConfig {
+  /** The mime type of the bitstream: ["video/avc", "video/hevc", "video/AV1"] */
   std::string mime;
+  /** A codec-specific configuration identifier, e.g. "avc1.640028" */
   std::string codec;
+  /** Width of the VideoFrame in pixels, potentially including non-visible padding, and prior to
+   * considering potential ratio adjustments. */
   size_t codedWidth;
+  /** Height of the VideoFrame in pixels, potentially including non-visible padding, and prior to
+   * considering potential ratio adjustments. */
   size_t codedHeight;
+  /** A sequence of codec specific bytes, commonly known as extradata. */
   std::vector<std::byte> description;
 };
 
@@ -20,7 +27,7 @@ struct VideoFrame {
   bool isKeyframe;
 };
 
-std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename);
+std::optional<VideoDecoderConfig> GetVideoDecoderConfig(const std::string& videoFilename);
 
 bool ExtractVideoFrames(const std::string& videoFilename,
                         std::function<void(const VideoFrame&)> callback);
