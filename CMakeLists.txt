@@ -14,7 +14,10 @@ find_package(spdlog REQUIRED)
 message("Building with CMake version: ${CMAKE_VERSION}")
 
 # Generate protobuf files
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS proto/foxglove/CompressedImage.proto)
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS
+  proto/foxglove/CameraCalibration.proto
+  proto/foxglove/CompressedImage.proto
+)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)

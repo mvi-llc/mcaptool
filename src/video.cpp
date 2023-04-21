@@ -127,6 +127,19 @@ std::optional<VideoDecoderConfig> GetVideoDecoderConfig(const std::string& video
       return {};
     }
 
+    // Check if the video has B-frames
+    const AVCodec* avCodec = avcodec_find_decoder(codecParams->codec_id);
+    AVCodecContext* codecCtx = avcodec_alloc_context3(avCodec);
+    avcodec_parameters_to_context(codecCtx, codecParams);
+    avcodec_open2(codecCtx, avCodec, nullptr);
+    const bool hasBFrames = bool(codecCtx->has_b_frames);
+    avcodec_free_context(&codecCtx);
+    if (hasBFrames) {
+      spdlog::error("B-frames are not supported");
+      avformat_close_input(&formatCtx);
+      return {};
+    }
+
     // FIXME: Confirm these are coded width/height (bitmap size) and not display width/height
     const size_t codedWidth = size_t(codecParams->width);
     const size_t codedHeight = size_t(codecParams->height);

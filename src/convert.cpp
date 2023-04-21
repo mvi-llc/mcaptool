@@ -5,6 +5,7 @@
 
 #include <sstream>
 
+#include "proto/foxglove/CameraCalibration.pb.h"
 #include "proto/foxglove/CompressedImage.pb.h"
 #include "protobuf.hpp"
 #include "video.hpp"
@@ -32,6 +33,55 @@ static std::string MimeKeyValues(const mcap::KeyValueMap& map) {
   return result.str();
 }
 
+static foxglove::CameraCalibration CreateDummyCalibration(uint32_t width, uint32_t height) {
+  constexpr double EXAMPLE_FOCAL_LENGTH_MM = 1.88;  // From the Intel RealSense D435 datasheet
+  constexpr double EXAMPLE_SENSOR_WIDTH_MM = 3.855;
+
+  foxglove::CameraCalibration calibration;
+  calibration.mutable_timestamp()->set_seconds(0);
+  calibration.mutable_timestamp()->set_nanos(0);
+  calibration.set_frame_id("video");
+  calibration.set_width(width);
+  calibration.set_height(height);
+  calibration.set_distortion_model("plumb_bob");
+  calibration.add_d(0);
+  calibration.add_d(0);
+  calibration.add_d(0);
+  calibration.add_d(0);
+  calibration.add_d(0);
+
+  const double sensor_height_mm = (EXAMPLE_SENSOR_WIDTH_MM * height) / width;
+  const double fx = width * (EXAMPLE_FOCAL_LENGTH_MM / EXAMPLE_SENSOR_WIDTH_MM);
+  const double fy = height * (EXAMPLE_FOCAL_LENGTH_MM / sensor_height_mm);
+  const double cx = width / 2;
+  const double cy = height / 2;
+
+  calibration.add_k(fx);
+  calibration.add_k(0);
+  calibration.add_k(cx);
+  calibration.add_k(0);
+  calibration.add_k(fy);
+  calibration.add_k(cy);
+  calibration.add_k(0);
+  calibration.add_k(0);
+  calibration.add_k(1);
+
+  calibration.add_p(fx);
+  calibration.add_p(0);
+  calibration.add_p(cx);
+  calibration.add_p(0);
+  calibration.add_p(0);
+  calibration.add_p(fy);
+  calibration.add_p(cy);
+  calibration.add_p(0);
+  calibration.add_p(0);
+  calibration.add_p(0);
+  calibration.add_p(1);
+  calibration.add_p(0);
+
+  return calibration;
+}
+
 bool Convert(const std::string& inputFilename, const std::string& outputFilename) {
   const auto config = GetVideoDecoderConfig(inputFilename);
   if (!config) {
@@ -46,21 +96,46 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
   mcap::McapWriterOptions writerOpts{""};
   writerOpts.compression = mcap::Compression::None;
   writerOpts.noChunkCRC = true;
-  const auto status = writer.open(outputFilename, writerOpts);
+  auto status = writer.open(outputFilename, writerOpts);
   if (!status.ok()) {
-    std::cerr << "Failed to open output file: " << status.message << "\n";
+    spdlog::error("Failed to open output file: {}", status.message);
     return false;
   }
 
   const std::string topicName = "video";
   const std::string keyframeTopicName = "video/keyframes";
+  const std::string calibrationTopicName = "video/calibration";
 
-  // Create a schema for `foxglove.CompressedImage`
+  // Create a schema for `foxglove.CameraCalibration`. A dummy calibration is
+  // written to the "video/calibration" topic to enable 3D visualization in
+  // Foxglove Studio
+  mcap::Schema calibrationSchema{"foxglove.CameraCalibration", "protobuf",
+                                 ProtobufFdSet(foxglove::CameraCalibration::descriptor())};
+  writer.addSchema(calibrationSchema);
+
+  // Create a schema for `foxglove.CompressedImage`. This schema is used for the
+  // "video" topic holding video bitstream data
   mcap::Schema schema{"foxglove.CompressedImage", "protobuf",
                       ProtobufFdSet(foxglove::CompressedImage::descriptor())};
   writer.addSchema(schema);
 
-  // Create a topic for the "video" topic
+  // Create a channel for the "video/calibration" topic and publish a single message
+  mcap::Channel calibrationChannel{calibrationTopicName, "protobuf", calibrationSchema.id, {}};
+  writer.addChannel(calibrationChannel);
+  const auto calibration =
+    CreateDummyCalibration(uint32_t(config->codedWidth), uint32_t(config->codedHeight));
+  const auto serializedCalibration = calibration.SerializeAsString();
+  mcap::Message calibrationMsg{};
+  calibrationMsg.channelId = calibrationChannel.id;
+  calibrationMsg.dataSize = serializedCalibration.size();
+  calibrationMsg.data = reinterpret_cast<const std::byte*>(serializedCalibration.data());
+  status = writer.write(calibrationMsg);
+  if (!status.ok()) {
+    spdlog::error("Failed to write calibration message: {}", status.message);
+    return false;
+  }
+
+  // Create a channel for the "video" topic
   mcap::KeyValueMap videoMetadata{
     {"keyframe_index", keyframeTopicName},
     {"video:coded_width", std::to_string(config->codedWidth)},
@@ -98,6 +173,7 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     image.set_frame_id("video");
     image.set_format(frame.isKeyframe ? mimeKeyframe : mime);
     image.set_data(frame.data, frame.size);
+    const auto serializedMsg = image.SerializeAsString();
 
     if (frame.isKeyframe) {
       keyframes.emplace_back(frameNumber, frame.timestamp);
@@ -108,8 +184,8 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
     msg.sequence = frameNumber;
     msg.logTime = frame.timestamp;
     msg.publishTime = frame.timestamp;
-    msg.dataSize = frame.size;
-    msg.data = frame.data;
+    msg.dataSize = serializedMsg.size();
+    msg.data = reinterpret_cast<const std::byte*>(serializedMsg.data());
     const auto writeStatus = writer.write(msg);
     if (!writeStatus.ok()) {
       spdlog::error("Failed to write video frame {} ({} bytes): {}", frameNumber, frame.size,
