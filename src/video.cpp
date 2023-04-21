@@ -347,7 +347,7 @@ bool ExtractVideoFrames(const std::string& videoFilename,
           frame.data = reinterpret_cast<const std::byte*>(packetFiltered->data);
           frame.size = size_t(packetFiltered->size);
           frame.timestamp =
-            uint64_t(packetFiltered->pts * av_q2d(stream->time_base) * 1e9);  // [ns]
+            uint64_t(double(packetFiltered->pts) * av_q2d(stream->time_base) * 1e9);  // [ns]
           frame.isKeyframe = packetFiltered->flags & AV_PKT_FLAG_KEY;
           callback(frame);
         }
