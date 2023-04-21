@@ -18,19 +18,17 @@ static std::string BytesToHex(const mcap::ByteArray& bytes) {
   return result;
 }
 
-// NOTE: This does not do any escaping on keys or values
-static std::string ToJson(const mcap::KeyValueMap& map) {
+// Converts a key-value map to "key1=value1;key2=value2" format
+static std::string MimeKeyValues(const mcap::KeyValueMap& map) {
   std::stringstream result;
-  result << "{";
   bool first = true;
   for (const auto& [key, value] : map) {
     if (!first) {
-      result << ",";
+      result << ";";
     }
+    result << key << "=" << value;
     first = false;
-    result << fmt::format("\"{}\":\"{}\"", key, value);
   }
-  result << "}";
   return result.str();
 }
 
@@ -88,7 +86,7 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
   writer.addChannel(keyframeChannel);
 
   const std::string mime = config->mime;
-  const std::string mimeKeyframe = mime + ";" + ToJson(keyframeMetadata);
+  const std::string mimeKeyframe = mime + ";" + MimeKeyValues(keyframeMetadata);
   uint32_t frameNumber = 0;
   std::vector<std::pair<uint32_t, uint64_t>> keyframes;
 
