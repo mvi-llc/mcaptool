@@ -96,7 +96,7 @@ static std::optional<AV1CodecConfigurationRecord> ParseAV1CodecConfigurationReco
   // return true;
 }
 
-std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename) {
+std::optional<VideoDecoderConfig> GetVideoDecoderConfig(const std::string& videoFilename) {
   AVFormatContext* formatCtx = nullptr;
   if (avformat_open_input(&formatCtx, videoFilename.data(), nullptr, nullptr) != 0) {
     spdlog::error("Failed to open \"{}\"", videoFilename);
@@ -118,7 +118,8 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
   }
 
   if (videoStreamIndex >= 0) {
-    AVCodecParameters* codecParams = formatCtx->streams[videoStreamIndex]->codecpar;
+    const AVStream* videoStream = formatCtx->streams[videoStreamIndex];
+    AVCodecParameters* codecParams = videoStream->codecpar;
     const AVCodecDescriptor* codecDesc = avcodec_descriptor_get(codecParams->codec_id);
     if (!codecDesc) {
       spdlog::error("Failed to get codec descriptor for \"{}\"", videoFilename);
@@ -126,8 +127,9 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
       return {};
     }
 
-    const size_t width = size_t(codecParams->width);
-    const size_t height = size_t(codecParams->height);
+    // FIXME: Confirm these are coded width/height (bitmap size) and not display width/height
+    const size_t codedWidth = size_t(codecParams->width);
+    const size_t codedHeight = size_t(codecParams->height);
 
     if (codecParams->codec_id == AV_CODEC_ID_HEVC) {
       // ${cccc}.${PP}.${C}.${T}${LL}.${CC}
@@ -143,16 +145,9 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
         return {};
       }
 
-      // const uint8_t configurationVersion = extradata[0];
-      // const uint8_t generalProfileSpace = (extradata[1] >> 6) & 0x3;
       const uint8_t generalTierFlag = (extradata[1] >> 5) & 0x1;
-      // uint8_t generalProfileIdc = extradata[1] & 0x1F;
       const uint32_t generalProfileCompatibilityFlags =
         uint32_t((extradata[2] << 24) | (extradata[3] << 16) | (extradata[4] << 8) | extradata[5]);
-      // const uint64_t generalConstraintIndicatorFlags =
-      //   ((uint64_t)extradata[6] << 40) | ((uint64_t)extradata[7] << 32) | (extradata[8] << 24) |
-      //   (extradata[9] << 16) | (extradata[10] << 8) | extradata[11];
-      // const uint8_t generalLevelIdc = extradata[12];
       const uint8_t compatibilityIdc = (generalProfileCompatibilityFlags >> 16) & 0xFF;
 
       const int profile = codecParams->profile;
@@ -165,7 +160,7 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
         fmt::format("hev1.{}.{}.{}{}.B{}", profile, compatibility, tier, level, flags);
 
       avformat_close_input(&formatCtx);
-      return VideoCodecInfo{mime, codec, width, height, {}};
+      return VideoDecoderConfig{mime, codec, codedWidth, codedHeight, {}};
     } else if (codecParams->codec_id == AV_CODEC_ID_H264) {
       // H264 codec format is <fourcc>.<profile_idc>.<profile_compatibility>.<level_idc>
       // Where profile_idc, profile_compatibility, and level_idc are one byte hex values (two
@@ -189,7 +184,7 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
         fmt::format("avc1.{:02x}{:02x}{:02x}", profileIdc, profileCompatibility, levelIdc);
 
       avformat_close_input(&formatCtx);
-      return VideoCodecInfo{mime, codec, width, height, {}};
+      return VideoDecoderConfig{mime, codec, codedWidth, codedHeight, {}};
     } else if (codecParams->codec_id == AV_CODEC_ID_AV1) {
       // AV1 codec format is
       // <fourcc>.<profile>.<level><tier>.<bitDepth>.<monochrome>.<chromaSubsampling>.
@@ -221,7 +216,7 @@ std::optional<VideoCodecInfo> GetVideoCodecInfo(const std::string& videoFilename
       description.assign(extradata, extradata + extradataSize);
 
       avformat_close_input(&formatCtx);
-      return VideoCodecInfo{mime, codec, width, height, description};
+      return VideoDecoderConfig{mime, codec, codedWidth, codedHeight, description};
     }
   }
 
