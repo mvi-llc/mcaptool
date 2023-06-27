@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED on)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(argparse REQUIRED)
+find_package(base64 REQUIRED)
 find_package(ffmpeg REQUIRED)
 find_package(fmt REQUIRED)
 find_package(mcap REQUIRED)
@@ -14,9 +15,11 @@ find_package(spdlog REQUIRED)
 message("Building with CMake version: ${CMAKE_VERSION}")
 
 # Generate protobuf files
+set(Protobuf_IMPORT_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/proto/")
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS
   proto/foxglove/CameraCalibration.proto
-  proto/foxglove/CompressedImage.proto
+  proto/foxglove/CompressedVideo.proto
+  proto/foxglove/KeyValuePair.proto
 )
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -37,7 +40,7 @@ endif()
 if(MSVC)
   set(DESIRED_WARNINGS "-WX")
 else()
-  set(DESIRED_WARNINGS "-Wall -Wextra -Wconversion -Wunreachable-code -Wuninitialized -pedantic-errors -Wold-style-cast -Wno-error=unused-variable -Wshadow -Wfloat-equal")
+  set(DESIRED_WARNINGS "-Wall -Wextra -Wconversion -Wunreachable-code -Wuninitialized -pedantic-errors -Wold-style-cast -Wno-error=unused-variable -Wno-sign-conversion -Wshadow -Wfloat-equal")
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(DESIRED_WARNINGS "${DESIRED_WARNINGS} -Wmost")
   endif()
@@ -61,6 +64,7 @@ add_executable(mcaptool
 )
 target_link_libraries(mcaptool
   argparse::argparse
+  base64::base64
   ffmpeg::avcodec
   ffmpeg::avformat
   ffmpeg::avutil
