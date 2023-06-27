@@ -152,7 +152,7 @@ std::optional<VideoDecoderConfig> GetVideoDecoderConfig(const std::string& video
       // <https://www.w3.org/TR/webcodecs-hevc-codec-registration/#fully-qualified-codec-strings>
       const uint8_t* extradata = codecParams->extradata;
       if (codecParams->extradata_size < 23) {
-        spdlog::error("HEVC extradata is too small (%d bytes) for \"{}\"",
+        spdlog::error("HEVC extradata is too small ({} bytes) for \"{}\"",
                       codecParams->extradata_size, videoFilename);
         avformat_close_input(&formatCtx);
         return {};
