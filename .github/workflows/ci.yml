@@ -20,7 +20,7 @@ jobs:
 
       - name: Install conan
         run: |
-          pip install conan==2.0.4
+          pip install conan==2.0.7
 
       - name: Setup conan cache
         uses: actions/cache@v3

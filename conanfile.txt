@@ -8,7 +8,7 @@ protobuf/3.21.9
 spdlog/1.11.0
 
 [tool_requires]
-cmake/3.25.3
+cmake/3.26.4
 
 [generators]
 CMakeDeps
