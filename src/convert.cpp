@@ -3,34 +3,23 @@
 #include <mcap/mcap.hpp>
 #include <spdlog/spdlog.h>
 
+#include <libbase64.h>
 #include <sstream>
 
-#include "proto/foxglove/CameraCalibration.pb.h"
-#include "proto/foxglove/CompressedImage.pb.h"
+#include "foxglove/CameraCalibration.pb.h"
+#include "foxglove/CompressedVideo.pb.h"
 #include "protobuf.hpp"
 #include "video.hpp"
 
-static std::string BytesToHex(const mcap::ByteArray& bytes) {
-  std::string result;
-  result.reserve(bytes.size() * 2);
-  for (const auto b : bytes) {
-    result += fmt::format("{:02x}", uint8_t(b));
-  }
-  return result;
-}
-
-// Converts a key-value map to "key1=value1;key2=value2" format
-static std::string MimeKeyValues(const mcap::KeyValueMap& map) {
-  std::stringstream result;
-  bool first = true;
-  for (const auto& [key, value] : map) {
-    if (!first) {
-      result << ";";
-    }
-    result << key << "=" << value;
-    first = false;
-  }
-  return result.str();
+static std::string BytesToBase64(const mcap::ByteArray& bytes) {
+  std::string res;
+  // 4/3 the size of the input, rounded up to the nearest multiple of 4
+  const size_t fourThirds = bytes.size() * 4 / 3;
+  size_t outLength = fourThirds + (4 - fourThirds % 4);
+  res.resize(outLength);
+  base64_encode(reinterpret_cast<const char*>(bytes.data()), bytes.size(), &res[0], &outLength, 0);
+  res.resize(outLength);
+  return res;
 }
 
 static foxglove::CameraCalibration CreateDummyCalibration(uint32_t width, uint32_t height) {
@@ -113,10 +102,10 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
                                  ProtobufFdSet(foxglove::CameraCalibration::descriptor())};
   writer.addSchema(calibrationSchema);
 
-  // Create a schema for `foxglove.CompressedImage`. This schema is used for the
+  // Create a schema for `foxglove.CompressedVideo`. This schema is used for the
   // "video" topic holding video bitstream data
-  mcap::Schema schema{"foxglove.CompressedImage", "protobuf",
-                      ProtobufFdSet(foxglove::CompressedImage::descriptor())};
+  mcap::Schema schema{"foxglove.CompressedVideo", "protobuf",
+                      ProtobufFdSet(foxglove::CompressedVideo::descriptor())};
   writer.addSchema(schema);
 
   // Create a channel for the "video/calibration" topic and publish a single message
@@ -136,54 +125,56 @@ bool Convert(const std::string& inputFilename, const std::string& outputFilename
   }
 
   // Create a channel for the "video" topic
-  mcap::KeyValueMap videoMetadata{
-    {"keyframe_index", keyframeTopicName},
-    {"video:coded_width", std::to_string(config->codedWidth)},
-    {"video:coded_height", std::to_string(config->codedHeight)},
-    {"video:codec", config->codec},
-    {"video:mime", config->mime},
-  };
   mcap::KeyValueMap keyframeMetadata{
-    {"keyframe_index", keyframeTopicName},
-    {"coded_width", std::to_string(config->codedWidth)},
-    {"coded_height", std::to_string(config->codedHeight)},
     {"codec", config->codec},
+    {"codedWidth", std::to_string(config->codedWidth)},
+    {"codedHeight", std::to_string(config->codedHeight)},
+    {"keyframeIndex", keyframeTopicName},
   };
   if (!config->description.empty()) {
-    videoMetadata["video:description"] = BytesToHex(config->description);
-    keyframeMetadata["description"] = BytesToHex(config->description);
+    keyframeMetadata["configuration"] = BytesToBase64(config->description);
   }
-  mcap::Channel videoChannel{topicName, "protobuf", schema.id, videoMetadata};
+  mcap::Channel videoChannel{topicName, "protobuf", schema.id};
   writer.addChannel(videoChannel);
 
   // Create a topic fo the "video/keyframes" topic
-  mcap::Channel keyframeChannel{keyframeTopicName, "", 0, {}};
+  mcap::Channel keyframeChannel{keyframeTopicName, "", 0};
   writer.addChannel(keyframeChannel);
 
   const std::string mime = config->mime;
-  const std::string mimeKeyframe = mime + ";" + MimeKeyValues(keyframeMetadata);
   uint32_t frameNumber = 0;
   std::vector<std::pair<uint32_t, uint64_t>> keyframes;
   std::vector<uint8_t> serializedMsg;
 
   // Write video data to the "video" topic
   const bool result = ExtractVideoFrames(inputFilename, [&](const VideoFrame& frame) {
-    foxglove::CompressedImage image;
-    image.mutable_timestamp()->set_seconds(int64_t(frame.timestamp / 1000000000));
-    image.mutable_timestamp()->set_nanos(int32_t(frame.timestamp % 1000000000));
-    image.set_frame_id("video");
-    image.set_format(frame.isKeyframe ? mimeKeyframe : mime);
-    image.set_data(frame.data, frame.size);
-    const size_t serializedSize = image.ByteSizeLong();
-    if (serializedSize > serializedMsg.size()) {
-      serializedMsg.resize(serializedSize);
-    }
-    image.SerializeWithCachedSizesToArray(serializedMsg.data());
-
+    foxglove::CompressedVideo video;
+    video.mutable_timestamp()->set_seconds(int64_t(frame.timestamp / 1000000000));
+    video.mutable_timestamp()->set_nanos(int32_t(frame.timestamp % 1000000000));
+    video.set_frame_id("video");
+    video.set_data(frame.data, frame.size);
+    video.set_keyframe(frame.isKeyframe);
     if (frame.isKeyframe) {
+      // video.metadata is an array of `KeyValuePair` structs. Fill it out from
+      // the keyframe metadata map
+      for (const auto& [key, value] : keyframeMetadata) {
+        auto* pair = video.add_metadata();
+        pair->set_key(key);
+        pair->set_value(value);
+      }
+
       keyframes.emplace_back(frameNumber, frame.timestamp);
     }
 
+    // Serialize the protobuf message to a vector of bytes
+    const size_t serializedSize = video.ByteSizeLong();
+    if (serializedSize > serializedMsg.size()) {
+      serializedMsg.resize(serializedSize);
+    }
+    video.SerializeWithCachedSizesToArray(serializedMsg.data());
+
+    // Create an MCAP message wrapping the serialized protobuf message and write
+    // it to the MCAP file (using the "video" topic via `videoChannel.id`)
     mcap::Message msg;
     msg.channelId = videoChannel.id;
     msg.sequence = frameNumber;
